@@ -1,0 +1,12 @@
+package "nanoShell"
+version "1.0"
+
+# Defines 3 modes of mutual exclusion
+defmode "mode 1"
+defmode "mode 2"
+defmode "mode 3"
+
+modeoption "file" f "file" string typestr="filename" mode="mode 1" optional
+modeoption "max" m "max" int mode="mode 2" optional
+modeoption "signalfile" s "signalfile" mode="mode 3" optional
+
