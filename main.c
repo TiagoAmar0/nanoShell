@@ -16,102 +16,11 @@
 
 #include "debug.h"
 #include "memory.h"
-
-#define ARGS_SIZE 5
+#include "aux.h"
+#include "signal.h"
 
 time_t start_time;
-
-void handle_sigusr1(void);
-void handle_signal(int signal);
-char * read_user_input_line(void);
-char ** split_input_into_arguments(char * line);
-
-void handle_sigusr1(void){
-	pid_t pid;
-	int status;
-
-	pid = fork();
-	if(pid == -1){
-		ERROR(5, "Failed to fork()");
-	} else if(pid == 0){
-		printf("\nnanoShell started at %s", ctime(&start_time));
-		exit(EXIT_SUCCESS);
-	} else {
-		if(waitpid(pid, &status, 0) == -1){
-			ERROR(6, "waitpid");
-		}
-	}
-}
-
-void handle_signal(int signal){
-	int aux = errno;
-
-	if(signal == SIGINT){
-	}
-
-	if(signal == SIGUSR1){
-		handle_sigusr1();
-	}
-
-	errno = aux;
-}
-
-char * read_user_input_line(void){
-	char * buffer = NULL;
-	size_t buffer_size = 0;
-
-	// Read line from stdin (user input) and allocates memory
-	if(getline(&buffer, &buffer_size, stdin) == -1){
-		// Don't return an error if user just sents an EOF
-		if(feof(stdin)){
-			exit(0);
-		} else {
-			ERROR(1, "Failed to allocate memory for user input. Exiting.\n");
-		}
-	}
-
-	return buffer;
-}
-
-char ** split_input_into_arguments(char * line){
-
-	int total = 0, args_size = ARGS_SIZE;
-	char * arg = NULL;
-
-	// Allocate memory for a string array
-	char ** args = MALLOC(sizeof(char *) * ARGS_SIZE);
-	if(args == NULL){
-		ERROR(2, "Error allocating memory for input arguments. Exiting.\n");
-	}
-
-	// Places the pointer in input first word
-	arg = strtok(line, " \t\r\n\a");
-
-	while(arg != NULL){
-
-		// Add arg to args list and increments the total
-		args[total] = arg;
-		total++;
-
-		// If the total of args is equal or more than the size of args array, reallocates more memory
-		if(total >= args_size){
-			args_size += ARGS_SIZE;
-			// Reallocate memory
-			args = realloc(args, sizeof(char *) * args_size);
-			if(args == NULL){
-				ERROR(3, "Error allocating memory for input arguments. Exiting.\n");
-			}
-		}
-
-		// Place the pointer to the next word
-		arg = strtok(NULL, " \t\r\n\a");
-	}
-
-	// Last argument should be NULL
-	args[total] = NULL;
-
-	return args;
-}
+int applications_executions = 0, stdout_redirections = 0, stderr_redirections = 0;
 
 int main(int argc, char *argv[]){
 
@@ -137,6 +46,10 @@ int main(int argc, char *argv[]){
 
 	if(sigaction(SIGINT, &act, NULL) < 0){
 		ERROR(4, "sigaction - SIGINT");
+	}
+
+	if(sigaction(SIGUSR2, &act, NULL) < 0){
+		ERROR(4, "sigaction - SIGUSR2");
 	}
 
 	while(1){
