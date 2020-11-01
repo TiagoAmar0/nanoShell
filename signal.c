@@ -16,6 +16,13 @@ extern int applications_executions;
 extern int stdout_redirections;
 extern int stderr_redirections;
 
+void handle_sigint(int signal, siginfo_t* info, void* vp){
+    if(signal == SIGINT){
+        printf("[INFO] SIGINT sent by PID = %d. Terminating nanoShell\n", info->si_pid);
+        exit(0);
+    }
+}
+
 void handle_sigusr1(void){
 	pid_t pid;
 	int status;
@@ -35,10 +42,6 @@ void handle_sigusr1(void){
 
 void handle_signal(int signal){
 	int aux = errno;
-
-	if(signal == SIGINT){
-		printf("\nSIGINT detected\n");
-	}
 
 	if(signal == SIGUSR1){
 		handle_sigusr1();

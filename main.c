@@ -49,19 +49,23 @@ int main(int argc, char *argv[]){
 	}
 
 	char * line = NULL;
-	struct sigaction act;
-	int commands_executed = 0, response;
+	struct sigaction act, sigint_act;
+	int response;
 
 	// Signal handlers definitions
 	act.sa_handler = handle_signal;
 	act.sa_flags = SA_RESTART;
 	sigemptyset(&act.sa_mask);
 
+	sigint_act.sa_sigaction = handle_sigint;
+	sigint_act.sa_flags = SA_SIGINFO;
+	sigemptyset(&sigint_act.sa_mask);
+
 	if(sigaction(SIGUSR1, &act, NULL) < 0){
 		ERROR(4, "sigaction - SIGUSR1");
 	}
 
-	if(sigaction(SIGINT, &act, NULL) < 0){
+	if(sigaction(SIGINT, &sigint_act, NULL) < 0){
 		ERROR(4, "sigaction - SIGINT");
 	}
 
@@ -69,11 +73,12 @@ int main(int argc, char *argv[]){
 		ERROR(4, "sigaction - SIGUSR2");
 	}
 
-	// 
+	// If -f/--file arg is given, checks if file exists and processes it
 	if(program_args.file_given){
 		if(check_if_file_exists(program_args.file_arg) != 0){
+			ERROR(1, "cannot open file '%s'", program_args.file_arg);
 		}
-		read_commands_file(program_args.file_arg);
+		read_commands_file(program_args.file_arg, &applications_executions, &stdout_redirections, &stderr_redirections);
 	}
 
 	if(!program_args.file_given && !program_args.help_given){
@@ -86,15 +91,15 @@ int main(int argc, char *argv[]){
 			// Processes the given command and returns the status of the operation.
 			// 0 = Success
 			// 2 = invalid input. restart the process
-			response = process_input(line);
+			response = process_input(line, &applications_executions, &stdout_redirections, &stderr_redirections);
 
 			if(response == 0){ // Response = 0 means that the command was successfully executed
 
 				// Increments the total of commands executed
-				commands_executed++;
+				//applications_executions++;
 
 				// checks if -m/--max is set and if the max commands limit was reached
-				if(program_args.max_given && commands_executed >= program_args.max_arg){
+				if(program_args.max_given && applications_executions >= program_args.max_arg){
 					printf("\n[END] Executed %d commands (-m %d)\n", program_args.max_arg, program_args.max_arg);
 					exit(EXIT_SUCCESS);
 				}

@@ -14,6 +14,45 @@
 
 #define _GNU_SOURCE
 
+// Turns all array items to NULL starting from a certain position
+void remove_items_array(char ** args, int args_n, int pos){
+	for(int i = pos; i < args_n; i++){
+		args[i] = NULL;
+	}
+}
+
+// Checks if following symbols are present in input (>, >>, 2>, 2>>)
+// Retrieves the filename to redirection and cleans the args array
+int check_redirection(char ** args, int args_n, char * filename){
+	int res = 0;
+
+	for(int i = 0; i < args_n - 2; i++){
+		if(strcmp(args[i], ">") == 0){
+			strcpy(filename, args[i + 1]);
+			remove_items_array(args, args_n, i);
+			res = 1;
+			i = args_n - 1;
+		} else if(strcmp(args[i], ">>") == 0){
+			strcpy(filename, args[i + 1]);
+			remove_items_array(args, args_n, i);
+			res = 2;
+			i = args_n - 1;
+		} else if(strcmp(args[i], "2>") == 0){
+			strcpy(filename, args[i + 1]);
+			remove_items_array(args, args_n, i);
+			res = 3;
+			i = args_n - 1;
+		} else if(strcmp(args[i], "2>>") == 0){
+			strcpy(filename, args[i + 1]);
+			remove_items_array(args, args_n, i);
+			res = 4;
+			i = args_n - 1;
+		}
+	}
+
+	return res;
+}
+
 // Checks if given filename corresponds to actual file
 int check_if_file_exists(char * filename){
 	// Check if file exists and has read permissions
@@ -26,11 +65,12 @@ int check_if_file_exists(char * filename){
 
 // Receives a string with a command and proceeds to validate and execute it
 // Returns 0 if success or 2 if the command should be ignored
-int process_input(char * line){
+int process_input(char * line, int * executed, int * stdout_redirect, int * stderr_redirect){
 	char ** args = NULL;
+	char filename[100];
 	pid_t pid;
-	int status;
-
+	int status, res = 0, args_n = 0;
+	FILE * output = NULL;
 	// skips the proccess if user just pressed ENTER
 	if(strcmp(line, "\n") == 0){
 		return 2;
@@ -43,12 +83,48 @@ int process_input(char * line){
 	}
 
 	// Get an array with splitted args
-	args = split_input_into_arguments(line);
+	args = split_input_into_arguments(line, &args_n);
 
 	// If command "bye" is entered, finishes the program
 	if(strcmp(args[0], "bye") == 0){
 		printf("[INFO] bye command detected. Terminating nanoShell.\n");
-		return 0;
+		exit(EXIT_SUCCESS);
+	}
+
+	res = check_redirection(args, args_n, filename);
+
+	// Checks if there is any redirection (>, >>, 2>, 2>>)
+	switch (res){
+		case 1: // 1 == ">"
+			output = freopen(filename, "w", stdout);
+			if(output == NULL){
+				WARNING("Failed to open file to redirection");
+			}
+			(*stdout_redirect)++;
+			break;
+		case 2: // 2 == ">>"
+			output = freopen(filename, "a", stdout);
+			if(output == NULL){
+				WARNING("Failed to open file to redirection");
+			}
+			(*stdout_redirect)++;
+			break;
+
+		case 3:
+			output = freopen(filename, "w", stderr);
+			if(output == NULL){
+				WARNING("Failed to open file to redirection");
+			}
+			(*stderr_redirect)++;
+			break;
+
+		case 4:
+			output = freopen(filename, "a", stderr);
+			if(output == NULL){
+				WARNING("Failed to open file to redirection");
+			}
+			(*stderr_redirect)++;
+			break;
 	}
 
 	// Create a child process to run command
@@ -63,7 +139,14 @@ int process_input(char * line){
 		// Waits for the children to execute
 		if(waitpid(pid, &status, 0) == -1){
 			ERROR(4, "Waitpid");
-		}	
+		}
+		(*executed)++;
+		if(res > 0){
+			// Close file
+			fclose(output);
+			// Resume stdout default behaviour
+			freopen("/dev/tty", "w", stdout);
+		}
 	}
 
 	return 0;
@@ -86,7 +169,7 @@ int check_comment(char * line){
 }
 
 // Read the file specified in -f/--file option and executes commands
-void read_commands_file(char * filename){
+void read_commands_file(char * filename, int * executed_applications, int * stdout_redirect, int * stderr_redirect){
 	FILE * file = NULL;
 	char * line = NULL;
 	ssize_t length;
@@ -104,7 +187,7 @@ void read_commands_file(char * filename){
 		if(check_comment(line) == 0){
 			printf("[command #%d]: %s", executed, line);
 			executed++;
-			process_input(line);
+			process_input(line, executed_applications, stdout_redirect, stderr_redirect); 
 		}
 	}
 }
@@ -154,7 +237,7 @@ char * read_user_input_line(void){
 }
 
 // Receives the user input string and returns an array of parameters
-char ** split_input_into_arguments(char * line){
+char ** split_input_into_arguments(char * line, int * args_n){
 
 	int total = 0, args_size = ARGS_SIZE;
 	char * arg = NULL;
@@ -190,6 +273,7 @@ char ** split_input_into_arguments(char * line){
 
 	// Last argument should be NULL
 	args[total] = NULL;
+	*args_n = total + 1;
 
 	return args;
 }
