@@ -16,26 +16,43 @@
 
 #include "debug.h"
 #include "memory.h"
+#include "args.h"
 #include "aux.h"
 #include "signal.h"
 
 time_t start_time;
 int applications_executions = 0, stdout_redirections = 0, stderr_redirections = 0;
+struct gengetopt_args_info program_args;
 
 int main(int argc, char *argv[]){
 
 	// Get start time
 	time(&start_time);
 
-	/* Disable warnings */
-	(void)argc; (void)argv;
+	// Parse gengetopt arguments
+	if (cmdline_parser(argc, argv, &program_args) != 0){
+		ERROR(1, "Can't parse gengetopt arguments");
+	}
+
+	// Check if -m/--max is set and the parameter is an integer bigger than zero
+	if(program_args.max_given && program_args.max_arg <= 0){
+		printf("[ERROR] invalid value '%d' for -m/--max\n", program_args.max_arg);
+		exit(1);
+	}
+
+	if(program_args.signalfile_given){
+		generate_signal_file();
+	}
+
+	if(program_args.max_given){
+		printf("[INFO] terminates after %d commands\n", program_args.max_arg);
+	}
 
 	char * line = NULL;
-	char ** args = NULL;
 	struct sigaction act;
-	pid_t pid;
-	int status;
+	int commands_executed = 0, response;
 
+	// Signal handlers definitions
 	act.sa_handler = handle_signal;
 	act.sa_flags = SA_RESTART;
 	sigemptyset(&act.sa_mask);
@@ -52,35 +69,41 @@ int main(int argc, char *argv[]){
 		ERROR(4, "sigaction - SIGUSR2");
 	}
 
-	while(1){
-		printf(">>> ");
-
-		line = read_user_input_line();
-
-		if(strcmp(line, "\n") == 0){
-			continue;
+	// 
+	if(program_args.file_given){
+		if(check_if_file_exists(program_args.file_arg) != 0){
 		}
+		read_commands_file(program_args.file_arg);
+	}
 
-		args = split_input_into_arguments(line);
-		if(strcmp(args[0], "bye") == 0){
-			printf("[INFO] bye command detected. Terminating nanoShell.\n");
-			return 0;
-		}
+	if(!program_args.file_given && !program_args.help_given){
+		while(1){
+			printf("nanoShell$");
 
-		pid = fork();
-		if(pid == -1){
-			ERROR(1, "Failed to fork.");
-		} else if(pid == 0){
-			if(execvp(args[0], args) == -1){
-				ERROR(1, "Failed to exec()");
-			}
-			exit(EXIT_SUCCESS);
-		} else {
-			if(waitpid(pid, &status, 0) == -1){
-				ERROR(4, "Waitpid");
+			// Retrieves user input
+			line = read_user_input_line();
+			
+			// Processes the given command and returns the status of the operation.
+			// 0 = Success
+			// 2 = invalid input. restart the process
+			response = process_input(line);
+
+			if(response == 0){ // Response = 0 means that the command was successfully executed
+
+				// Increments the total of commands executed
+				commands_executed++;
+
+				// checks if -m/--max is set and if the max commands limit was reached
+				if(program_args.max_given && commands_executed >= program_args.max_arg){
+					printf("\n[END] Executed %d commands (-m %d)\n", program_args.max_arg, program_args.max_arg);
+					exit(EXIT_SUCCESS);
+				}
+			} else if(response == 2){ // Response = 2 means that the loop iteration must be skipped
+				continue;
 			}
 		}
 	}
+	
 
 	return 0;
 }

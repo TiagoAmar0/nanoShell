@@ -37,7 +37,7 @@ void handle_signal(int signal){
 	int aux = errno;
 
 	if(signal == SIGINT){
-		printf("\nSIGINT detected");
+		printf("\nSIGINT detected\n");
 	}
 
 	if(signal == SIGUSR1){
